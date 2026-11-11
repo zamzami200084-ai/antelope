@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한 끼 영양 계산기 🍱</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brandGreen: '#4CAF50',
+                        lightGreen: '#E8F5E9',
+                        brandOrange: '#FF9800',
+                        lightOrange: '#FFF3E0',
+                        bgCream: '#FDFBF7'
+                    },
+                    fontFamily: {
+                        sans: ['Pretendard', 'Malgun Gothic', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .food-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .food-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(76, 175, 80, 0.2);
+            border-color: #4CAF50;
+        }
+    </style>
+</head>
+<body class="bg-bgCream text-gray-800 min-h-screen p-4 md:p-8">
+
+    <!-- 헤더 -->
+    <header class="max-w-6xl mx-auto text-center mb-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-brandGreen mb-3">🍱 한 끼 영양 장바구니</h1>
+        <p class="inline-block bg-white text-gray-500 text-sm px-4 py-2 rounded-full shadow-sm border border-gray-100">
+            ※ 안내: 표시되는 영양 수치는 대략값이며, 실제 제품이나 조리법에 따라 차이가 있을 수 있습니다.
+        </p>
+    </header>
+
+    <main class="max-w-6xl mx-auto flex flex-col lg:flex-row gap-6">
+        
+        <!-- 왼쪽: 식품 리스트 (장바구니 담기) -->
+        <section class="lg:w-3/5 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-brandGreen">식단 담기 (클릭해보세요!)</h2>
+                <button onclick="clearCart()" class="text-sm text-gray-500 hover:text-red-500 transition-colors">🗑️ 전체 비우기</button>
+            </div>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4" id="foodGrid">
+                <!-- 자바스크립트로 렌더링 -->
+            </div>
+        </section>
+
+        <!-- 오른쪽: 분석 결과 -->
+        <section class="lg:w-2/5 flex flex-col gap-6">
+            
+            <!-- 장바구니 내역 -->
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <h2 class="text-xl font-bold text-brandOrange mb-4">🛒 내 장바구니</h2>
+                <ul id="cartList" class="max-h-40 overflow-y-auto space-y-2 mb-2 pr-2">
+                    <li class="text-gray-400 text-sm text-center py-4">음식을 클릭해서 장바구니에 담아주세요.</li>
+                </ul>
+            </div>
+
+            <!-- 그래프 분석 영역 -->
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex-grow">
+                <h2 class="text-xl font-bold text-brandGreen mb-4">📊 영양소 분석</h2>
+                
+                <!-- 막대 그래프 (권장량 대비) -->
+                <div class="space-y-4 mb-8" id="progressContainer">
+                    <!-- 자바스크립트로 렌더링 -->
+                </div>
+
+                <!-- 원그래프 (탄단지 비율) -->
+                <div class="relative h-48 w-full mb-6">
+                    <canvas id="macroChart"></canvas>
+                </div>
+
+                <!-- 부드러운 피드백 조언 -->
+                <div id="adviceBox" class="bg-lightOrange border-l-4 border-brandOrange p-4 rounded-r-xl text-sm leading-relaxed text-gray-700">
+                    장바구니에 음식을 담으면 다정한 영양 조언을 해드릴게요! 😊
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        // 식품 데이터 (20종 - 식품영양학적 대략값 적용)
+        const foods = [
+            { id: 1, name: '백미밥', emoji: '🍚', cal: 300, c: 65, p: 6, f: 1 },
+            { id: 2, name: '컵라면', emoji: '🍜', cal: 500, c: 70, p: 10, f: 15 },
+            { id: 3, name: '참치삼각김밥', emoji: '🍙', cal: 200, c: 35, p: 5, f: 6 },
+            { id: 4, name: '닭가슴살샐러드', emoji: '🥗', cal: 150, c: 10, p: 20, f: 4 },
+            { id: 5, name: '후라이드치킨', emoji: '🍗', cal: 250, c: 15, p: 15, f: 15 }, // 1조각
+            { id: 6, name: '햄버거', emoji: '🍔', cal: 450, c: 50, p: 20, f: 20 },
+            { id: 7, name: '피자', emoji: '🍕', cal: 300, c: 35, p: 12, f: 12 }, // 1조각
+            { id: 8, name: '떡볶이', emoji: '🌶️', cal: 500, c: 90, p: 12, f: 10 },
+            { id: 9, name: '일반 김밥', emoji: '🥢', cal: 400, c: 60, p: 10, f: 12 },
+            { id: 10, name: '돈까스', emoji: '🍱', cal: 800, c: 80, p: 35, f: 35 },
+            { id: 11, name: '핫도그', emoji: '🌭', cal: 250, c: 30, p: 8, f: 12 },
+            { id: 12, name: '소시지', emoji: '🥓', cal: 150, c: 2, p: 7, f: 13 },
+            { id: 13, name: '구운 계란', emoji: '🥚', cal: 70, c: 1, p: 6, f: 5 },
+            { id: 14, name: '바나나', emoji: '🍌', cal: 100, c: 25, p: 1, f: 0 },
+            { id: 15, name: '우유', emoji: '🥛', cal: 130, c: 10, p: 6, f: 7 },
+            { id: 16, name: '콜라', emoji: '🥤', cal: 140, c: 35, p: 0, f: 0 },
+            { id: 17, name: '아메리카노', emoji: '☕', cal: 10, c: 2, p: 0, f: 0 },
+            { id: 18, name: '단백질바', emoji: '🍫', cal: 200, c: 20, p: 20, f: 6 },
+            { id: 19, name: '제육덮밥', emoji: '🍛', cal: 700, c: 90, p: 30, f: 20 },
+            { id: 20, name: '김치찌개', emoji: '🍲', cal: 400, c: 30, p: 20, f: 15 }
+        ];
+
+        // 성인 1끼 권장량 (2000kcal 기준 1/3)
+        const recommended = { cal: 667, c: 100, p: 20, f: 17 };
+        let cart = {};
+        let chartInstance = null;
+
+        // 초기화 함수
+        function init() {
+            const grid = document.getElementById('foodGrid');
+            foods.forEach(food => {
+                grid.innerHTML += `
+                    <div onclick="addToCart(${food.id})" class="food-card relative bg-lightGreen border-2 border-transparent rounded-2xl p-4 text-center cursor-pointer select-none">
+                        <div id="badge-${food.id}" class="hidden absolute -top-2 -right-2 bg-brandOrange text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow-md z-10">0</div>
+                        <div class="text-4xl mb-2">${food.emoji}</div>
+                        <div class="font-bold text-gray-800 text-sm mb-1 break-keep">${food.name}</div>
+                        <div class="text-xs text-gray-500">${food.cal} kcal</div>
+                    </div>
+                `;
+            });
+            updateUI();
+        }
+
+        // 장바구니 추가
+        function addToCart(id) {
+            cart[id] = (cart[id] || 0) + 1;
+            updateUI();
+        }
+
+        // 장바구니 제거
+        function removeFromCart(id) {
+            if(cart[id] > 1) cart[id]--;
+            else delete cart[id];
+            updateUI();
+        }
+
+        // 전체 비우기
+        function clearCart() {
+            cart = {};
+            updateUI();
+        }
+
+        // UI 통합 업데이트
+        function updateUI() {
+            let total = { cal: 0, c: 0, p: 0, f: 0 };
+            const cartList = document.getElementById('cartList');
+            cartList.innerHTML = '';
+
+            // 뱃지 리셋
+            foods.forEach(f => document.getElementById(`badge-${f.id}`).classList.add('hidden'));
+
+            const cartKeys = Object.keys(cart);
+            if (cartKeys.length === 0) {
+                cartList.innerHTML = '<li class="text-gray-400 text-sm text-center py-4">음식을 클릭해서 장바구니에 담아주세요.</li>';
+            }
+
+            cartKeys.forEach(id => {
+                const food = foods.find(f => f.id == id);
+                const qty = cart[id];
+                
+                total.cal += food.cal * qty;
+                total.c += food.c * qty;
+                total.p += food.p * qty;
+                total.f += food.f * qty;
+
+                // 뱃지 표시
+                const badge = document.getElementById(`badge-${id}`);
+                badge.textContent = qty;
+                badge.classList.remove('hidden');
+                badge.classList.add('flex');
+
+                // 리스트 아이템 렌더링
+                cartList.innerHTML += `
+                    <li class="flex justify-between items-center bg-gray-50 px-3 py-2 rounded-lg">
+                        <span class="text-sm font-medium">${food.emoji} ${food.name} <span class="text-brandOrange ml-1">x${qty}</span></span>
+                        <button onclick="removeFromCart(${id})" class="bg-red-100 text-red-500 hover:bg-red-200 px-2 py-1 rounded text-xs font-bold transition-colors">빼기</button>
+                    </li>
+                `;
+            });
+
+            renderProgressBars(total);
+            renderChart(total);
+            renderAdvice(total);
+        }
+
+        // 권장량 대비 막대그래프 렌더링
+        function renderProgressBars(total) {
+            const container = document.getElementById('progressContainer');
+            const data = [
+                { label: '🔥 열량', val: total.cal, rec: recommended.cal, unit: 'kcal', color: 'bg-brandOrange' },
+                { label: '🍚 탄수화물', val: total.c, rec: recommended.c, unit: 'g', color: 'bg-brandGreen' },
+                { label: '🥩 단백질', val: total.p, rec: recommended.p, unit: 'g', color: 'bg-blue-500' },
+                { label: '🥑 지방', val: total.f, rec: recommended.f, unit: 'g', color: 'bg-red-400' }
+            ];
+
+            container.innerHTML = data.map(item => {
+                const percent = Math.min((item.val / item.rec) * 100, 100).toFixed(1);
+                const overStatus = item.val > item.rec ? 'text-red-500 font-bold' : 'text-gray-500';
+                return `
+                    <div>
+                        <div class="flex justify-between text-xs font-bold mb-1">
+                            <span>${item.label}</span>
+                            <span class="${overStatus}">${item.val}${item.unit} / ${item.rec}${item.unit} (${Math.round((item.val / item.rec) * 100)}%)</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                            <div class="${item.color} h-2.5 rounded-full transition-all duration-500 ease-out" style="width: ${percent}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 탄단지 에너지 비율 원그래프 렌더링
+        function renderChart(total) {
+            const ctx = document.getElementById('macroChart').getContext('2d');
+            
+            // 에너지 섭취 비율 계산 (탄수화물: 4kcal/g, 단백질: 4kcal/g, 지방: 9kcal/g)
+            const cCal = total.c * 4;
+            const pCal = total.p * 4;
+            const fCal = total.f * 9;
+            const sumCal = cCal + pCal + fCal;
+
+            const cRatio = sumCal ? Math.round((cCal / sumCal) * 100) : 0;
+            const pRatio = sumCal ? Math.round((pCal / sumCal) * 100) : 0;
+            const fRatio = sumCal ? Math.round((fCal / sumCal) * 100) : 0;
+
+            if(chartInstance) chartInstance.destroy();
+
+            // 데이터가 없을 때는 회색 원 표시
+            const chartData = sumCal === 0 
+                ? { labels: ['데이터 없음'], datasets: [{ data: [100], backgroundColor: ['#E2E8F0'], borderWidth: 0 }] }
+                : {
+                    labels: [`탄수화물 (${cRatio}%)`, `단백질 (${pRatio}%)`, `지방 (${fRatio}%)`],
+                    datasets: [{
+                        data: [cCal, pCal, fCal],
+                        backgroundColor: ['#4CAF50', '#3B82F6', '#F87171'],
+                        hoverOffset: 4,
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                };
+
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { family: 'Pretendard' } } },
+                        tooltip: { enabled: sumCal > 0 }
+                    },
+                    animation: { animateScale: true }
+                }
+            });
+        }
+
+        // 다정한 영양 조언 알고리즘
+        function renderAdvice(total) {
+            const adviceBox = document.getElementById('adviceBox');
+            if(total.cal === 0) {
+                adviceBox.innerHTML = "장바구니에 음식을 담으면 다정한 영양 조언을 해드릴게요! 😊";
+                return;
+            }
+
+            const cCal = total.c * 4;
+            const pCal = total.p * 4;
+            const fCal = total.f * 9;
+            const sumCal = cCal + pCal + fCal;
+
+            const cRatio = (cCal / sumCal) * 100;
+            const pRatio = (pCal / sumCal) * 100;
+            const fRatio = (fCal / sumCal) * 100;
+
+            let messages = [];
+
+            // 열량 피드백
+            if (total.cal > 1000) {
+                messages.push("앗, 열량이 조금 높은 편이에요! 😅 다 드시면 식후에 많이 졸릴 수도 있어요. 음식량을 살짝 덜어내는 건 어떨까요?");
+            } else if (total.cal < 350) {
+                messages.push("식사가 너무 가벼운 것 같아요! 영양 보충을 위해 든든한 메뉴를 하나 더 추가해 보셔도 좋아요. 😉");
+            }
+
+            // 다량영양소 피드백
+            if (cRatio > 65) {
+                messages.push("탄수화물 비중이 다소 높네요! 🍚 혈당이 빨리 오를 수 있으니, 단백질이 풍부한 반찬이나 계란을 곁들여주면 훨씬 완벽해져요.");
+            }
+            if (pRatio < 12) {
+                messages.push("근육을 위한 단백질이 조금 부족해요! 💪 구운 계란이나 닭가슴살 샐러드, 우유를 추가해서 영양 밸런스를 꽉 채워보세요.");
+            }
+            if (fRatio > 35) {
+                messages.push("지방 섭취량이 꽤 높아요! 튀기거나 기름진 음식은 맛있지만, 건강을 위해 신선한 채소를 같이 드시는 걸 추천해요. 🥗");
+            }
+
+            // 퍼펙트 칭찬
+            if (messages.length === 0) {
+                messages.push("와우! 🌟 탄수화물, 단백질, 지방 비율이 아주 훌륭한 이상적인 식단이에요! 맛있고 건강하게 드세요. 최고입니다! 👍");
+            }
+
+            adviceBox.innerHTML = messages.join('<br><br>');
+        }
+
+        // 페이지 로드 시 초기화 실행
+        window.onload = init;
+    </script>
+</body>
+</html>
